@@ -66,14 +66,17 @@ class Tag_controller extends Module_controller
      **/
     public function retrieve($serial_number = '')
     {
-        $out = array();
-
-        $Tag = Tag_model::where('tag.serial_number', $serial_number)
-            ->filter()
-            ->get();
+        if (authorized_for_serial($serial_number)) {
+            $Tag = Tag_model::where('serial_number', $serial_number)
+                ->get()
+                ->toArray();
+        }
+        else{
+            $Tag = ['not authorized for this serial_number'];
+        }
 
         $obj = new View();
-        $obj->view('json', array('msg' => $Tag->toArray()));
+        $obj->view('json', array('msg' => $Tag));
     }
 
     /**
@@ -90,7 +93,8 @@ class Tag_controller extends Module_controller
             if($id){
                 $where[] = ['id', $id];
             }
-            Tag_model::where($where)
+            print_r($where);
+            echo Tag_model::where($where)
                 ->delete();
             $out['status'] = 'success';
         }else{
