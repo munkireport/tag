@@ -10,24 +10,8 @@ class Tag_controller extends Module_controller
 {
     public function __construct()
     {
-        if (! $this->authorized()) {
-            $obj = new View();
-            $obj->view('json', array('msg' => array('error' =>'Not authorized')));
-            die();
-        }
-
         $this->module_path = dirname(__FILE__) .'/';
         $this->view_path = $this->module_path . 'views/';
-    }
-
-    /**
-     * Default method
-     *
-     * @author AvB
-     **/
-    public function index()
-    {
-        echo "You've loaded the Tag module!";
     }
     
     public function listing()
@@ -51,15 +35,18 @@ class Tag_controller extends Module_controller
         $tag = post('tag');
         if ($serial_number and $tag) {
             if (authorized_for_serial($serial_number)) {
-                $tagm = new Tag_model;
-                $tagm->retrieve_record($serial_number, 'tag=?', array($tag));
-                $tagm->serial_number = $serial_number;
-                $tagm->tag = $tag;
-                $tagm->user = $_SESSION['user'];
-                $tagm->timestamp = time();
-                $tagm->save();
+                $tag = Tag_model::updateOrCreate(
+                    [
+                        'serial_number' => $serial_number,
+                        'tag' => $tag,
+                    ],
+                    [
+                        'user' => $_SESSION['user'],
+                        'timestamp' => time(),
+                    ]
+                );
 
-                $out = $tagm->rs;
+                $out = $tag;
             } else {
                 $out['status'] = 'error';
                 $out['msg'] = 'Not authorized for this serial';
@@ -81,13 +68,12 @@ class Tag_controller extends Module_controller
     {
         $out = array();
 
-        $Tag = new Tag_model;
-        foreach ($Tag->retrieve_records($serial_number) as $obj) {
-            $out[] = $obj->rs;
-        }
+        $Tag = Tag_model::where('tag.serial_number', $serial_number)
+            ->filter()
+            ->get();
 
         $obj = new View();
-        $obj->view('json', array('msg' => $out));
+        $obj->view('json', array('msg' => $Tag->toArray()));
     }
 
     /**
@@ -96,16 +82,19 @@ class Tag_controller extends Module_controller
      **/
     public function delete($serial_number = '', $id = -1)
     {
-        $out = array();
-        
-        $where = $id ? 'id=?' : '';
-        $bindings = $id ? array($id) : array();
+        $out = [];
+        $where = [];
 
-        $Tag = new Tag_model;
-        if (! $Tag->delete_record($serial_number, $where, $bindings)) {
-            $out['status'] = 'error';
-        } else {
+        if (authorized_for_serial($serial_number)) {
+            $where[] = ['serial_number', $serial_number];
+            if($id){
+                $where[] = ['id', $id];
+            }
+            Tag_model::where($where)
+                ->delete();
             $out['status'] = 'success';
+        }else{
+            $out['status'] = 'error';
         }
 
         $obj = new View();
@@ -120,8 +109,19 @@ class Tag_controller extends Module_controller
      **/
     public function all_tags($add_count = false)
     {
-        $Tag = new Tag_model;
+        $Tag = Tag_model::selectRaw('tag, count(*) as cnt')
+            ->filter()
+            ->groupBy('tag')
+            ->orderBy('tag', 'asc');
+
+        
+            if ($add_count) {
+                $out = $Tag->get()->toArray();
+            } else {
+                $out = $Tag->get()->pluck('tag')->toArray();
+            }
+        
         $obj = new View();
-        $obj->view('json', array('msg' => $Tag->all_tags($add_count)));
+        $obj->view('json', ['msg' => $out]);
     }
-} // END class Certificate_controller
+} // END class Tag_controller
